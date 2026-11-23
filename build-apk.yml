@@ -1,0 +1,55 @@
+name: Build APK
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      sherpa_version:
+        description: Versão do Sherpa-ONNX
+        default: "1.12.14"
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Desempacotar projeto
+        id: p
+        run: |
+          if [ -f Narrador-Kokoro-Android.zip ]; then
+            unzip -o Narrador-Kokoro-Android.zip
+            rm Narrador-Kokoro-Android.zip
+            git config user.name github-actions
+            git config user.email github-actions@users.noreply.github.com
+            git add -A
+            git commit -m "Atualiza projeto" || true
+            git push || true
+          fi
+          if [ -f settings.gradle.kts ]; then echo "has=true" >> $GITHUB_OUTPUT; else echo "Sem projeto ainda"; fi
+      - uses: actions/setup-java@v4
+        if: steps.p.outputs.has == 'true'
+        with: { distribution: temurin, java-version: 17 }
+      - uses: android-actions/setup-android@v3
+        if: steps.p.outputs.has == 'true'
+      - uses: gradle/actions/setup-gradle@v4
+        if: steps.p.outputs.has == 'true'
+        with: { gradle-version: "8.10.2" }
+      - name: Baixar Sherpa-ONNX (AAR)
+        if: steps.p.outputs.has == 'true'
+        run: |
+          V="${{ inputs.sherpa_version || '1.12.14' }}"
+          mkdir -p app/libs
+          curl -fL --retry 3 -o app/libs/sherpa-onnx.aar "https://huggingface.co/csukuangfj/sherpa-onnx-libs/resolve/main/android/aar/sherpa-onnx-$V.aar"
+          unzip -l app/libs/sherpa-onnx.aar | grep -E "arm64-v8a|classes.jar"
+          unzip -p app/libs/sherpa-onnx.aar classes.jar > /tmp/c.jar
+          javap -cp /tmp/c.jar com.k2fsa.sherpa.onnx.OfflineTtsKokoroModelConfig com.k2fsa.sherpa.onnx.OfflineTts
+      - name: Compilar
+        if: steps.p.outputs.has == 'true'
+        run: gradle :app:assembleRelease --no-daemon --stacktrace
+      - uses: actions/upload-artifact@v4
+        if: steps.p.outputs.has == 'true'
+        with:
+          name: narrador-kokoro-apk
+          path: app/build/outputs/apk/release/*.apk
