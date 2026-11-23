@@ -182,7 +182,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun verifyModel() { viewModelScope.launch { snack = Models.verify(ctx) } }
 
-    fun setThreads(n: Int) {
+  @JvmName("applyThreads")  fun setThreads(n: Int) {
         if (busyGen()) { snack = "Pare a geração antes."; return }
         Prefs.setThreads(ctx, n); threads = n; Engine.release()
     }
